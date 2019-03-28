@@ -1,92 +1,80 @@
-// -----------------------------------------------------------------------------
 // モジュールのインポート
-const scraperjs = require('scraperjs');
-const server = require("express")();
-const line = require("@line/bot-sdk"); // Messaging APIのSDKをインポート
+const express = require("express")();
+const PORT = process.env.PORT || 3000;
+const line = require("@line/bot-sdk"); // 追加
 
-// -----------------------------------------------------------------------------
-// パラメータ設定
-const line_config = {
+const config = {
     channelAccessToken: process.env.LINE_ACCESS_TOKEN, // 環境変数からアクセストークンをセットしています
     channelSecret: process.env.LINE_CHANNEL_SECRET // 環境変数からChannel Secretをセットしています
 };
 
-// -----------------------------------------------------------------------------
 // Webサーバー設定
-server.listen(process.env.PORT || 3000);
+express
+    .get('/', (req, res) => res.send('Hello world!'))
+    .post('/webhook', line.middleware(config), (req, res) => lineBot(req, res))
+    .listen(PORT, () => console.log(`Listening on ${PORT}`));
 
-// APIコールのためのクライアントインスタンスを作成
-const bot = new line.Client(line_config);
-
-// -----------------------------------------------------------------------------
-// ルーター設定
-server.post('/bot/webhook', line.middleware(line_config), (req, res, next) => {
-    // 先行してLINE側にステータスコード200でレスポンスする。
+function lineBot(req, res) {
     res.sendStatus(200);
 
-    // すべてのイベント処理のプロミスを格納する配列。
-    let events_processed = [];
-
     // イベントオブジェクトを順次処理。
-    req.body.events.forEach((event) => {
+    const promises = req.body.events.map(event => {
+        const bot = new line.Client(config);
         console.log(event);
         // この処理の対象をイベントタイプがメッセージで、かつ、テキストタイプだった場合に限定。
         if (event.type === "message" && event.message.type === "text") {
-            // replyMessage()で返信し、そのプロミスをevents_processedに追加。
-            // events_processed.push(bot.replyMessage(event.replyToken, {
-            //     type: "text",
-            //     text: getReplyMessage(event.message.text)
-            // }));
-            const messageObject = {
-                "type": "template",
-                "altText": "datepicker action",
-                "template": {
-                    "type": "buttons",
-                    "title": "予約したい日程を選択してね",
-                    "actions": [
-                        {
-                            "type": "datetimepicker",
-                            "label": "予約できる日を検索する",
-                            "mode": "date",
-                            "data": "action=datetemp&selectId=1"
-                        },
-                        {
-                            "type": "postback",
-                            "label": "キャンセルする",
-                            "data": "action=cancel&selectId=2"
-                        },
-                    ]
+            const messageObject = [
+                {
+                     "type": "text",
+                     "text": getReplyMessage(event.message.text)
+                },
+                {
+                    "type": "template",
+                    "altText": "datepicker action",
+                    "template": {
+                        "type": "buttons",
+                        "title": "予約可能な日を検索する",
+                        "text": "日付を選択する",
+                        "actions": [
+                            {
+                                "type": "datetimepicker",
+                                "label": "予約できる日を検索する",
+                                "mode": "date",
+                                "data": "action=datetemp&selectId=1"
+                            },
+                            {
+                                "type": "postback",
+                                "label": "キャンセルする",
+                                "data": "action=cancel&selectId=2"
+                            },
+                        ]
+                    }
                 }
-            };
-            events_processed.push(bot.replyMessage(event.replyToken, messageObject))
+            ];
 
+            return bot.replyMessage(event.replyToken, messageObject)
+        } else if (event.type === 'postback') {
+            const reserveDate = event.postback.params.date;
+            console.log(reserveDate)
+            bot.replyMessage(event.replyToken, {
+                type: "text",
+                text: `${reserveDate} の日程ですね。ただいま確認します。`
+            });
+
+            return bot.replyMessage(event.replyToken, {
+                type: "text",
+                text: '大井町は下のURLで確認できます。\n'
+                    + `https://www.sporu.jp/padel?today=${reserveDate}\n`
+                    + '所沢は下のURLで確認できます。\n'
+                    + `https://www.sporu.jp/padel?today=${reserveDate}\n`
+                    + 'パデル東京は下のURLで確認できます。\n'
+                    + `https://www.sporu.jp/padel?today=${reserveDate}\n`
+            });
         }
-        // else if (event.type === 'postback') {
-        //     const reserveDate = event.postback.params.date;
-        //     console.log(reserveDate)
-        //     events_processed.push(bot.replyMessage(event.replyToken, {
-        //         type: "text",
-        //         text: `${reserveDate} の日程ですね。ただいま確認します。`
-        //     }));
-        //
-        //     events_processed.push(bot.replyMessage(event.replyToken, {
-        //         type: "text",
-        //         text: '大井町は下のURLで確認できます。\n'
-        //             + `https://www.sporu.jp/padel?today=${reserveDate}\n`
-        //             + '所沢は下のURLで確認できます。\n'
-        //             + `https://www.sporu.jp/padel?today=${reserveDate}\n`
-        //             + 'パデル東京は下のURLで確認できます。\n'
-        //             + `https://www.sporu.jp/padel?today=${reserveDate}\n`
-        //     }));
-        // }
     });
 
-    // すべてのイベント処理が終了したら何個のイベントが処理されたか出力。
-    Promise.all(events_processed).then(
-        (response) => {
-            console.log(`${response.length} event(s) processed.`);
-        }
-    );});
+    Promise.all(promises).then(() => res.json({ success: true }));
+}
 
 function getReplyMessage(message) {
     if (message.indexOf('大井町') !== -1) {
