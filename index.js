@@ -21,59 +21,55 @@ function lineBot(req, res) {
     const promises = req.body.events.map(event => {
         const bot = new line.Client(config);
         console.log(event);
-        // この処理の対象をイベントタイプがメッセージで、かつ、テキストタイプだった場合に限定。
-        if (event.type === "message" && event.message.type === "text") {
-            const messageObject = [
-                {
-                     "type": "text",
-                     "text": getReplyMessage(event.message.text)
-                },
-                {
-                    "type": "template",
-                    "altText": "datepicker action",
-                    "template": {
-                        "type": "buttons",
-                        "title": "予約可能な日を検索する",
-                        "text": "日付を選択する",
-                        "actions": [
-                            {
-                                "type": "datetimepicker",
-                                "label": "予約できる日を検索する",
-                                "mode": "date",
-                                "data": "action=datetemp&selectId=1"
-                            },
-                            {
-                                "type": "postback",
-                                "label": "キャンセルする",
-                                "data": "action=cancel&selectId=2"
-                            },
-                        ]
+        switch (event.type) {
+            case 'message':
+                const messageObject = [
+                    {
+                        "type": "text",
+                        "text": getReplyMessage(event.message.text)
+                    },
+                    {
+                        "type": "template",
+                        "altText": "datepicker action",
+                        "template": {
+                            "type": "buttons",
+                            "title": "予約可能な日を検索する",
+                            "text": "日付を選択する",
+                            "actions": [
+                                {
+                                    "type": "datetimepicker",
+                                    "label": "予約できる日を検索する",
+                                    "mode": "date",
+                                    "data": "action=datetemp&selectId=1"
+                                },
+                                {
+                                    "type": "postback",
+                                    "label": "キャンセルする",
+                                    "data": "action=cancel&selectId=2"
+                                },
+                            ]
+                        }
                     }
-                }
-            ];
-
-            return bot.replyMessage(event.replyToken, messageObject)
-        } else if (event.type === 'postback') {
-            const reserveDate = event.postback.params.date;
-            console.log(reserveDate)
-            bot.replyMessage(event.replyToken, {
-                type: "text",
-                text: `${reserveDate} の日程ですね。ただいま確認します。`
-            });
-
-            return bot.replyMessage(event.replyToken, {
-                type: "text",
-                text: '大井町は下のURLで確認できます。\n'
-                    + `https://www.sporu.jp/padel?today=${reserveDate}\n`
-                    + '所沢は下のURLで確認できます。\n'
-                    + `https://www.sporu.jp/padel?today=${reserveDate}\n`
-                    + 'パデル東京は下のURLで確認できます。\n'
-                    + `https://www.sporu.jp/padel?today=${reserveDate}\n`
-            });
+                ];
+                return bot.replyMessage(event.replyToken, messageObject);
+            case 'postback':
+                const reserveDate = event.postback.params.date;
+                console.log(reserveDate);
+                return bot.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: '大井町パデルワンの空き状況は下のURLで確認できます。\n'
+                        + `https://www.sporu.jp/padel?today=${reserveDate}\n`
+                        + '所沢フットサルパーク パデルコートの空き状況は下のURLで確認できます。\n'
+                        + `https://yoyaku.fcjapan.jp/team/scripts/user/faci_schedule.php?faci_id=65&date=${reserveDate}&only=\n`
+                        // + 'パデル東京の空き状況は下のURLで確認できます。\n'
+                        // + `https://liv.lan.jp/padel/hp/rental_table.php?day=${reserveDate.replace(/-/g, '')}\n`
+                });
         }
     });
 
-    Promise.all(promises).then(() => res.json({ success: true }));
+    Promise.all(promises)
+        .then(() => res.json({ success: true }))
+        .catch(err => console.log(err));
 }
 
 function getReplyMessage(message) {
